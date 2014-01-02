@@ -1,7 +1,7 @@
 (ns azondi.tuner
   (:require-macros
-   [cljs.core.async.macros :refer [go]]
-   [dommy.macros :refer [node sel1]]
+   [cljs.core.async.macros :refer [go go-loop]]
+   [dommy.macros :refer [node sel1 by-id]]
    )
 
   (:require
@@ -16,10 +16,10 @@
    [domina.xpath :as dx]
 
    [dommy.utils :as utils]
-   [dommy.core :as dommy]
+   [dommy.core :as d]
 
    [azondi.dataflow :as dataflow]
-   [cljs.core.async :refer [<! put! chan mult tap]])
+   [cljs.core.async :refer [<! put! chan mult tap timeout sliding-buffer filter<]])
 
   (:import [goog.net Jsonp]
            [goog Uri]))
@@ -28,7 +28,7 @@
 
 (let [el (sel1 "#stations")]
   (doseq [s stations]
-    (dommy/append! el [:tr [:td s] [:td {:id (str "bbc/livetext/" s)}]])))
+    (d/append! el [:tr [:td s] [:td {:id (str "bbc/livetext/" s)}]])))
 
 (defn event->clj [evt]
   (-> evt .-evt .-event_ .-data parse (js->clj :keywordize-keys true)))
@@ -79,13 +79,13 @@ table cell to the latest payload for that radio station."
      (loop [log (list)]
        (let [evt (<! ch)
              log (take 10 (conj log [(:topic evt) (:payload evt)]))]
-         (dommy/replace-contents!
+         (d/replace-contents!
           messages-el
           (for [[topic payload] log]
             [:tr [:td topic][:td payload]]))
          (recur log))))))
 
-(defn trigger-animation [ch]
+#_(defn trigger-animation [ch]
   (let [anim (sel1 "#animMessageArrival")
         txt (sel1 "#mqttMessageText")]
     (go
@@ -99,7 +99,7 @@ table cell to the latest payload for that radio station."
 
 (def default-duration "0.25s")
 
-(defn trigger-subscribing-animation
+#_(defn trigger-subscribing-animation
   [ch]
   (let [path-id "device-mqtt-subscribe-path"
         mpath (.createElement js/document "mpath")
@@ -124,15 +124,15 @@ table cell to the latest payload for that radio station."
                  [:circle {:cx 0 :cy 0 :r 8 :fill "red" :stroke "black"}]
                  anim])]
 
-    (dommy/hide! g)
-    (listen! anim "beginEvent" (fn [_] (dommy/show! g)))
-    (listen! anim "endEvent" (fn [_] (dommy/hide! g)))
-    (dommy/append! parent g)
+    (d/hide! g)
+    (listen! anim "beginEvent" (fn [_] (d/show! g)))
+    (listen! anim "endEvent" (fn [_] (d/hide! g)))
+    (d/append! parent g)
 
     ;; Add an info panel
     (let [message-el (node [:text {:font-family "monospace" :font-size 14 :x 120 :y 60} "(message)"])
           topic-el (node [:text {:font-family "monospace" :font-size 14 :x 120 :y 80} "(topic)"])]
-      (dommy/append!
+      (d/append!
        parent
        (node [:g
               [:text {:font-family "serif" :font-size 14 :x 0 :y 60} "Last message:"] message-el
@@ -142,14 +142,14 @@ table cell to the latest payload for that radio station."
       (go
        (loop []
          (let [{:keys [topic payload]} (<! ch)]
-           (dommy/set-text! topic-el topic)
-           (dommy/set-text! message-el payload)
+           (d/set-text! topic-el topic)
+           (d/set-text! message-el payload)
            (.beginElement anim)
 
            )
          (recur))))))
 
-(defn trigger-publishing-animation
+#_(defn trigger-publishing-animation
   []
   (let [path-id "device-mqtt-publish-path"
         mpath (.createElement js/document "mpath")
@@ -174,24 +174,120 @@ table cell to the latest payload for that radio station."
                  [:circle {:cx 0 :cy 0 :r 8 :fill "red" :stroke "black"}]
                  anim])]
 
-    (dommy/hide! g)
-    (listen! anim "beginEvent" (fn [_] (dommy/show! g)))
-    (listen! anim "endEvent" (fn [_] (dommy/hide! g)))
-    (dommy/append! parent g)
+    (d/hide! g)
+    (listen! anim "beginEvent" (fn [_] (d/show! g)))
+    (listen! anim "endEvent" (fn [_] (d/hide! g)))
+    (d/append! parent g)
 
-    (dommy/listen! (sel1 "#my-device") :click (fn [evt] (.beginElement anim)))))
+    (d/listen! (sel1 "#my-device") :click (fn [evt] (.beginElement anim)))))
+
+(def rand-ints (vec (take 50 (map inc (repeatedly #(rand-int 9))))))
+
+(defn tune [topic ch]
+  (filter< (comp (partial = topic) :topic) ch))
+
+(defn now []
+  (.now js/Date))
+
+(defn make-ring-buffer [size]
+  (let [result (make-array 2)]
+    (aset result 0 0)
+    (aset result 1 (make-array size))
+    result))
+
+;; state: [t cnt]
+;; ring buf: [pos nums]
+(defn counter [topic ch ringbuf]
+  (let [ch (tune topic ch)
+        state (make-array 2)
+        ringbuf (make-ring-buffer 10)
+        ]
+    (aset state 0 (now))
+    (aset state 1 0)
+    (go
+     (loop []
+       (let [[msg c] (alts! [ch (timeout 100)])]
+         (if (< (now) (+ (aget state 0) 2000))
+           (condp = c
+             ;; Increment count
+             ch (aset state 1 (inc (aget state 1)))
+             nil)
+           (do
+             (.log js/console "Count in last 2000" (aget state 1))
+             ;; Store result in ring buffer
+             (aset (aget ringbuf 1) (aget ringbuf 0) (aget state 1))
+             (aset ringbuf 0 (let [pos (aget ringbuf 0)]
+                               (.log js/console "pos is" pos)
+                               (.log js/console "ringbuf length is " (.-length (aget ringbuf 1)))
+                               (if (>= pos (dec (.-length (aget ringbuf 1)))) 0 (inc pos))))
+             (.log js/console "Ringbuf" ringbuf)
+
+             ;; Advance time
+             (aset state 0 (+ (aget state 0) 2000))
+             ;; Reset count
+             (aset state 1 (condp = c ch 1 0)))))
+       (recur)))))
+
+(defn meter [topic ch rb]
+  (let [meter-width 180
+        meter (node [:rect {:x 0 :y 0 :width meter-width :height 20 :stroke "white" :fill "green"}])
+        rate (node [:text {:x 80 :y 10} "-1"])
+        ch (tune topic ch)]
+
+    (d/prepend! (sel1 :#content)
+                (node [:svg {:width 120 :height 30 :style "border: 1px dotted black"}
+                       [:g {:transform "translate(2,2) scale(0.2)"}
+                        [:rect {:x -2 :y -2 :width (+ meter-width 4) :height 24 :stroke "black" :fill "none"}]
+                        meter
+                        (for [x (range 10 meter-width 10)]
+                          [:rect {:x (dec x) :y 0 :width 2 :height 20 :stroke "none" :fill "white"}])]
+                       rate]
+
+                      ))
+    (d/prepend! (sel1 :#content) (node [:p "Meter: " topic]))
+
+    (let [decay 20]
+      (go
+       (loop [w meter-width]
+         (let [[msg c] (alts! [ch (timeout 50)])
+               nw (if (= c ch) meter-width (- w decay))]
+           (d/set-attr! meter :width nw)
+           (recur nw)))))
+
+    (go-loop []
+             (<! (timeout 2000))
+             (.log js/console "ringbuf is" rb)
+             (.log js/console "Setting rate to " (str (aget (aget rb 1) (dec (aget rb 0)))))
+             (d/set-text! rate (str (aget (aget rb 1) (aget rb 0))))
+             (recur)
+             )
+
+    ))
 
 (defn init
   "Start all the individual processes"
   []
   (let [mlt (mult (get-events))] ; multiplex the Server Sent Events, so each process can
-    (message-counter (tap mlt (chan)) (sel "#message-count"))
-    (radio-table (tap mlt (chan)))
-    (message-log (tap mlt (chan)))
+    #_(message-counter (tap mlt (chan)) (sel "#message-count"))
+    #_(radio-table (tap mlt (chan)))
+    #_(message-log (tap mlt (chan)))
+
+    (let [rb (make-ring-buffer 10)]
+      (counter "/test/erratic-pulse" (tap mlt (chan 10)) rb)
+
+      #_(meter "/test/quotes" (tap mlt (chan (sliding-buffer 1))) (make-ring-buffer 10))
+      (meter "/test/erratic-pulse" (tap mlt (chan (sliding-buffer 1))) rb))
+
 
     ;; Slides are piggybacking on this right now
-    (trigger-animation (tap mlt (chan)))
-    (trigger-subscribing-animation (tap mlt (chan)))
-    (trigger-publishing-animation)))
+    #_(trigger-animation (tap mlt (chan)))
+    #_(trigger-subscribing-animation (tap mlt (chan)))
+    #_(trigger-publishing-animation)))
 
-(init)
+(set! (.-onload js/window)
+      (fn []
+        (let [a (make-array 10)]
+          (aset a 0 "a")
+          (.log js/console a)
+          )
+        (init)))
