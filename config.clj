@@ -75,7 +75,7 @@
               ]}
 
 
-  ;; MQTT broker
+  ;; MQTT transport
 
   :mqtt-decoder
   {:jig/component jig.netty.mqtt/MqttDecoder
@@ -92,7 +92,7 @@
    :size 100}
 
   :mqtt-handler
-  {:jig/component azondi.mqtt-broker/NettyMqttHandler
+  {:jig/component azondi.transports.mqtt/NettyMqttHandler
    :jig/project "../azondi/project.clj"
    :jig/dependencies [:mqtt-notification-channel]
    }

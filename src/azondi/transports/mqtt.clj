@@ -1,10 +1,10 @@
 ;; Copyright © 2014, OpenSensors.IO. All Rights Reserved.
-(ns azondi.mqtt-broker
+(ns azondi.transports.mqtt
   (:require jig
             [jig.util :refer [satisfying-dependency]]
             [clojure.core.async :refer [put!]])
   (:import  [io.netty.channel ChannelHandlerAdapter]
-            [jig.Lifecycle]))
+            jig.Lifecycle))
 
 (def registered-topics
   {"/uk/gov/hackney/parking" #{"yodit" "paula"}
