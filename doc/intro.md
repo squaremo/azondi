@@ -1,3 +1,5 @@
-# Introduction to azondi
+# What is Azondi
 
-TODO: write [great documentation](http://jacobian.org/writing/great-documentation/what-to-write/)
+Azondi is a system that ingests metrics from sensors, processes
+them and builds a time series database.
+
