@@ -18,7 +18,7 @@
 
                  ;; Back-end
                  [clojurewerkz/machine_head "1.0.0-beta5"]
-                 [clojurewerkz/cassaforte "1.3.0-beta7"]
+                 [clojurewerkz/cassaforte "1.3.0-beta8"]
                  [cheshire "5.2.0"]
 
                  ;; Jig
