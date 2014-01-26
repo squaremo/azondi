@@ -11,7 +11,7 @@
     (println config)
     system)
   (start [_ system]
-    (let [host (:database-hosts config)
+    (let [host (:hosts config)
           ks   (:keyspace config)]
       (cc/connect! host)
       (cql/use-keyspace ks)))

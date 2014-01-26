@@ -154,8 +154,8 @@
   :opensensors/database
   {:jig/component azondi.db/Database
    :jig/project "../azondi/project.clj"
-   :database-hosts ["127.0.0.1"]
-   :database-keyspace "opensensors"
+   :hosts ["127.0.0.1"]
+   :keyspace "opensensors"
    }
 
   }}
