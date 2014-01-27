@@ -41,5 +41,11 @@ The following code can be used to set the schema up (
                                            :primary-key [:topic_name]}))
 (create-index :topics :publisher)
 
-
+;;;cassandra can store max of 2million columns of data so we are going
+to store a week's worth of data for each topic in one column
+(create-table :sensor_data (column-definitions {:topic_name :varchar
+                                                :event_time :timestamp
+												:payload :varchar
+												:primary-key
+                                                [:topic_name :event_time]}))
 ```
