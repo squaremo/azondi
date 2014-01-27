@@ -44,8 +44,9 @@ The following code can be used to set the schema up (
 ;;;cassandra can store max of 2million columns of data so we are going
 to store a week's worth of data for each topic in one column
 (create-table :sensor_data (column-definitions {:topic_name :varchar
+                                                :week_no :int
                                                 :event_time :timestamp
 												:payload :varchar
 												:primary-key
-                                                [:topic_name :event_time]}))
+                                                [[:topic_name :week_no] :event_time]}))
 ```
