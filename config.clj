@@ -158,4 +158,9 @@
    :keyspace "opensensors"
    }
 
+  :opensensors/development/seed
+  {:jig/component azondi.development.seed/Database
+   :jig/project "../azondi/project.clj"
+   :jig/dependencies [:opensensors/database]
+   }
   }}
