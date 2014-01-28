@@ -15,7 +15,7 @@ The following code can be used to set the schema up (
 (create-keyspace "opensensors"
                  (with {:replication {:class "SimpleStrategy" :replication_factor 2}}))
 (use-keyspace "opensensors")
-(create-table "users" (column-definitions {:fname :varchar
+(create-table :users (column-definitions {:fname :varchar
                                            :sname :varchar
                                            :id :varchar
                                            :email :varchar
@@ -40,4 +40,13 @@ The following code can be used to set the schema up (
                                            :created_date :timestamp
                                            :primary-key [:topic_name]}))
 (create-index :topics :publisher)
+
+;;;cassandra can store max of 2million columns of data so we are going
+to store a month's worth of data for each topic in one column
+(create-table :sensor_data (column-definitions {:topic_name :varchar
+                                                :date :text ;;yyyy-mm
+                                                :event_time :timestamp
+												:payload :varchar
+												:primary-key
+                                                [[:topic_name :date] :event_time]}))
 ```
