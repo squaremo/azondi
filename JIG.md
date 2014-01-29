@@ -7,9 +7,9 @@ First, clone Jig.
 Now add a ```.jig/config.clj``` file and add the following content :-
 
     #=(eval
-       (-> (clojure.core/read-string (slurp "../mqtt.opensensors.io/config.clj"))))
+       (-> (clojure.core/read-string (slurp "../azondi/config.clj"))))
 
-Change the location of the ```../mqtt.opensensors.io/config.clj``` file which is resolved relative to the Jig repo directory.
+Change the location of the ```../azondi/config.clj``` file which is resolved relative to the Jig repo directory.
 
 Check the paths in Jig's ```project.clj``` and ```config/config.clj```, and modify them according to your local environment. Then use ```lein repl``` (or ```M-x nrepl-jack-in``` if you're using Emacs) and develop according to [Stuart Sierra's workflow reloaded pattern](http://thinkrelevance.com/blog/2013/06/04/clojure-workflow-reloaded). See Jig's [README.md](https://github.com/juxt/jig) for more information.
 
@@ -65,10 +65,9 @@ Here's a (probably out-of-date) example.
 Each component has a lifecycle consisting of ```init```, ```start``` and ```stop``` phases. The order that components are started in is determined by Jig, see ```:jig/dependencies``` in the config.
 
 The first 2 components are provided by Jig, and they help get a website up and running using Pedestal routes. That much comes for free. The remaining components are provided by this project and are described here.
+### mqtt-server
 
-### opensensors.mqtt/MqttBridge
-
-This uses ```org.fusesource.mqtt.client.MQTT``` to subscribe to an MQTT service. It gets events, and places them on a core.async channel. It puts that channel into the system map for another component to listen to.
+This started the Netty mqtt server on port 1883
 
 ### opensensors.core/WebServices
 
@@ -90,6 +89,7 @@ but just a Jig componentized version.
 
 Places dummy events on the core.async channel, just to create some test noise (I wrote this prior to the MqttBridge, so it allowed me to connect things up for test purposes). I've left it in for example purposes. It's also handy because there is sometimes quite long gaps in receiving events from test.mosquitto.org
 
-### opensensors.core/StencilCache
-
-Stencil is a little painful in development because it caches templates for performance (which is great in production). But we can hook a cache expiry into our reload mechanism.
+### :opensensors/database
+Assumes that a datastax Cassandra DB is running locally with a
+predefined keyspace "opensensors".  For remote databases change your
+the hosts.
