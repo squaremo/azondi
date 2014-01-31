@@ -12,7 +12,8 @@
                :sname "S"
                :id    "yods"
                :email "yods@example.org"
-               :pword "yods-pwd"
+               ;; yods-pwd
+               :pword "$s0$e0801$MVTNO5fjX8fKevLhQby8zw==$zto1GKhCct/zBL8CXf5rlqjlTUThkSTPNRu2krbSof0="
                :role  "user"
                :publisher true}
             (if-not-exists))
@@ -20,7 +21,8 @@
                :sname "S"
                :id    "malcolm"
                :email "malcolm@example.org"
-               :pword "malcolm-pwd"
+               ;; "malcolm-pwd"
+               :pword "$s0$e0801$Rx1hB/mKositO9iDGWRIxg==$TJirCI5umAUPzD5ITuU2YpFoiSqFHITjxi8CJAFOktg="
                :role  "user"
                :publisher true}
             (if-not-exists))
@@ -28,7 +30,8 @@
                :sname "K"
                :id    "novemberain"
                :email "michael@example.org"
-               :pword "michael-pwd"
+               ;; "michael-pwd"
+               :pword "$s0$e0801$NvT1nSA6A4MRc5vE5m3ADA==$95syoMec4Ql6Ytlq30WeUnib9Hy3TaWgKKmikupqQ6o="
                :role  "user"
                :publisher true}
             (if-not-exists))
@@ -36,7 +39,8 @@
                :sname "Appleseed"
                :id    "appleseed"
                :email "appleseed@example.org"
-               :pword "appleseed-pwd"
+               ;; "appleseed-pwd"
+               :pword "$s0$e0801$5MJbCuB5cU5iNxYFINjBNw==$R0ughkDXkVDEzqynjfsljlpvWlU1MRpUQWqGiR81y6I="
                :role  "user"
                :publisher false}
             (if-not-exists))))
