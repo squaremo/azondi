@@ -2,8 +2,9 @@
 (ns azondi.transports.mqtt
   (:require jig
             [jig.util :refer [satisfying-dependency]]
-            [clojure.core.async :refer [put!]])
-  (:import  [io.netty.channel ChannelHandlerAdapter]
+            [clojure.core.async :refer [put!]]
+            [azondi.authentication :as auth])
+  (:import  [io.netty.channel ChannelHandlerAdapter ChannelHandlerContext]
             jig.Lifecycle))
 
 (def registered-topics
@@ -11,27 +12,66 @@
    "/juxt/big-red-button/malcolm" #{"malcolm"}
    "/juxt/big-red-button/yodit" #{"yodit"}})
 
-(def valid-users #{["yodit" "letmein"]
-                   ["michael" "clojurewerkz!"]
-                   ["malcolm" "password"]
-                   ["paula" "123"]})
+(def ^:const supported-mqtt-protocol "MQIsdp")
+(def ^:const supported-mqtt-version  3)
 
-(defn authenticated? [{:keys [username password]}]
-  (nil? (true? (valid-users [username password]))))
+(defn supported-protocol?
+  [^String protocol-name ^long protocol-version]
+  (and (= protocol-name    supported-mqtt-protocol)
+       (= protocol-version supported-mqtt-version)))
+
+(defn disconnect-client
+  [^ChannelHandlerContext ctx]
+  (doto ctx
+    (.writeAndFlush {:type :disconnect})
+    .close))
 
 ;;
 ;; Handlers
 ;;
 
 (defn handle-connect
-  [ctx msg connections]
-  (println "Got connection!" (pr-str ctx) (pr-str msg))
-  ;; TODO Validate connection protocol name and assert version is 3.1
-  (dosync (alter connections assoc ctx (assoc msg :authenticated? (authenticated? msg))))
-  (.writeAndFlush ctx {:type :connack}))
+  [^ChannelHandlerContext ctx {:keys [protocol-name
+                                      protocol-version
+                                      has-username
+                                      has-password
+                                      username
+                                      password] :as msg} connections]
+  ;; example msg:
+  ;; {:dup false,
+  ;;  :has-will false,
+  ;;  :has-username true,
+  ;;  :qos 0,
+  ;;  :client-id antares.1391193099727,
+  ;;  :clean-session true,
+  ;;  :will-retain false,
+  ;;  :username michael@example.org,
+  ;;  :has-password true,
+  ;;  :keepalive 60,
+  ;;  :type :connect,
+  ;;  :retain false,
+  ;;  :protocol-name MQIsdp,
+  ;;  :protocol-version 3,
+  ;;  :password michael-pwd,
+  ;;  :will-qos 0}
+  (if (supported-protocol? protocol-name protocol-version)
+    (do
+      (if (and has-username has-password)
+        (dosync
+         (alter connections assoc ctx (assoc msg
+                                        :authenticated? (auth/authenticates? (:username msg)
+                                                                             (:password msg)))))
+        (disconnect-client ctx))
+      (.writeAndFlush ctx {:type :connack}))
+    (do
+      ;; TODO: logging
+      (println (format "Unsupported protocol and/or version: %s v%d, disconnecting"
+                       protocol-name
+                       protocol-version))
+      (disconnect-client ctx))))
 
 (defn handle-subscribe
-  [ctx msg subs]
+  [^ChannelHandlerContext ctx msg subs]
   (.writeAndFlush ctx {:type :suback})
   (dosync
    (alter subs (fn [subs]
@@ -39,7 +79,7 @@
                          subs (map first (:topics msg)))))))
 
 (defn handle-publish
-  [ctx msg connections channel]
+  [^ChannelHandlerContext ctx msg connections channel]
   (println "Got message!" (pr-str ctx) (pr-str msg))
   (let [conn (get @connections ctx)]
     (when conn
@@ -52,11 +92,11 @@
         (.writeAndFlush ctx msg)))))
 
 (defn handle-pingreq
-  [ctx]
+  [^ChannelHandlerContext ctx]
   (.writeAndFlush ctx {:type :pingresp}))
 
 (defn handle-disconnect
-  [ctx]
+  [^ChannelHandlerContext ctx]
   (.close ctx))
 
 ;;
