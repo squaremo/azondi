@@ -26,6 +26,16 @@
     (.writeAndFlush {:type :disconnect})
     .close))
 
+(defn accept-connection
+  [^ChannelHandlerContext ctx {:keys [username]
+                               :as   msg} connections]
+  (let [conn {:username username
+              :will-qos (:will-qos msg)}]
+    (dosync
+     (alter connections assoc ctx conn))
+    (.writeAndFlush ctx {:type :connack})
+    conn))
+
 ;;
 ;; Handlers
 ;;
@@ -55,14 +65,10 @@
   ;;  :password michael-pwd,
   ;;  :will-qos 0}
   (if (supported-protocol? protocol-name protocol-version)
-    (do
-      (if (and has-username has-password)
-        (dosync
-         (alter connections assoc ctx (assoc msg
-                                        :authenticated? (auth/authenticates? (:username msg)
-                                                                             (:password msg)))))
-        (disconnect-client ctx))
-      (.writeAndFlush ctx {:type :connack}))
+    (if (and has-username has-password
+             (auth/authenticates? username password))
+      (accept-connection ctx msg connections)
+      (disconnect-client ctx))
     (do
       ;; TODO: logging
       (println (format "Unsupported protocol and/or version: %s v%d, disconnecting"
