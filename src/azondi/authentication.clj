@@ -18,7 +18,5 @@
   (if-let [user (first (select "users"
                                (where :email email)
                                (limit 1)))]
-    (do
-      (println email password user)
-      (sc/verify password (:pword user)))
+    (sc/verify password (:pword user))
     false))
