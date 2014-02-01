@@ -26,6 +26,16 @@
     (.writeAndFlush {:type :disconnect})
     .close))
 
+(defn abort
+  [^ChannelHandlerContext ctx]
+  (.close ctx))
+
+(defn reject-connection
+  [^ChannelHandlerContext ctx code]
+  (doto ctx
+    (.writeAndFlush {:type :connack :return-code code})
+    .close))
+
 (defn accept-connection
   [^ChannelHandlerContext ctx {:keys [username]
                                :as   msg} connections]
@@ -33,7 +43,7 @@
               :will-qos (:will-qos msg)}]
     (dosync
      (alter connections assoc ctx conn))
-    (.writeAndFlush ctx {:type :connack})
+    (.writeAndFlush ctx {:type :connack :return-code :accepted})
     conn))
 
 ;;
@@ -68,13 +78,13 @@
     (if (and has-username has-password
              (auth/authenticates? username password))
       (accept-connection ctx msg connections)
-      (disconnect-client ctx))
+      (reject-connection ctx :bad-username-or-password))
     (do
       ;; TODO: logging
       (println (format "Unsupported protocol and/or version: %s v%d, disconnecting"
                        protocol-name
                        protocol-version))
-      (disconnect-client ctx))))
+      (reject-connection ctx :unacceptable-protocol-version))))
 
 (defn handle-subscribe
   [^ChannelHandlerContext ctx msg subs]
@@ -111,16 +121,16 @@
 
 (defn make-channel-handler [{:keys [subs connections channel]}]
   (proxy [ChannelHandlerAdapter] []
-    (channelRead [ctx msg]
+    (channelRead [^ChannelHandlerContext ctx msg]
       (case (:type msg)
         :connect    (handle-connect ctx msg connections)
         :subscribe  (handle-subscribe ctx msg subs)
         :publish    (handle-publish ctx msg connections channel)
         :pingreq    (handle-pingreq ctx)
         :disconnect (handle-disconnect ctx)))
-    (exceptionCaught [ctx cause]
+    (exceptionCaught [^ChannelHandlerContext ctx cause]
       (try (throw cause)
-           (finally (.close ctx))))))
+           (finally (abort ctx))))))
 
 (deftype NettyMqttHandler [config]
   Lifecycle
