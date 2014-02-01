@@ -37,9 +37,10 @@
     .close))
 
 (defn accept-connection
-  [^ChannelHandlerContext ctx {:keys [username]
+  [^ChannelHandlerContext ctx {:keys [username client-id]
                                :as   msg} connections]
   (let [conn {:username username
+              :client-id client-id
               :will-qos (:will-qos msg)}]
     (dosync
      (alter connections assoc ctx conn))
