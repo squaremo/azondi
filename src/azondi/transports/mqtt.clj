@@ -39,16 +39,32 @@
   ;; Section 3.1: valid client ids are between 1 and 23 characters
   (<= 1 (.length client-id) 23))
 
+(defn ^:private maybe-disconnect
+  "Disconnects existing client with the given client id, if any.
+
+   See section 3.1."
+  [^String client-id {:keys [connections-by-ctx connections-by-client-id]}]
+  (if-let [state (get @connections-by-client-id client-id)]
+    (let [ctx (:ctx state)]
+      (println (format "Disconnecting existing connection with client id %s" client-id))
+      (disconnect-client ctx)
+      (dosync
+       (alter connections-by-client-id dissoc client-id)
+       (alter connections-by-ctx       dissoc ctx))
+      ctx)))
+
 (defn accept-connection
   [^ChannelHandlerContext ctx {:keys [username client-id has-will
                                       clean-session]
                                :as   msg}
    {:keys [connections-by-ctx connections-by-client-id] :as handler-state}]
-  (let [conn {:username username
+  (let [conn {:username  username
               :client-id client-id
-              :has-will has-will
-              :will-qos (when has-will
-                          (:will-qos msg))}]
+              :ctx       ctx
+              :has-will  has-will
+              :will-qos  (when has-will
+                           (:will-qos msg))}]
+    (maybe-disconnect client-id handler-state)
     (dosync
      (alter connections-by-ctx       assoc ctx conn)
      (alter connections-by-client-id assoc client-id conn))
