@@ -135,16 +135,15 @@
   [^ChannelHandlerContext ctx msg {:keys [connections-by-ctx
                                           subscriptions
                                           channel] :as handler-state}]
-  (println "Got message!" (pr-str ctx) (pr-str msg))
-  (let [conn (get @connections-by-ctx ctx)]
-    (when conn
-      (when channel
-        (println "putting on core.async channel")
-        #_ (put! channel msg))
-      (println "Sending response to conn: " conn)
-      ;; Handle subscribers, although this should probably happen somewhere else now
-      (doseq [ctx (get @subscriptions (:topic msg))]
-        (.writeAndFlush ctx msg)))))
+  ;; example message:
+  ;; {:payload #<byte[] [B@1503e6b>,
+  ;;  :message-id 1,
+  ;;  :topic a.topic,
+  ;;  :type :publish,
+  ;;  :dup false,
+  ;;  :qos 1,
+  ;;  :retain false}
+  )
 
 (defn handle-pingreq
   [^ChannelHandlerContext ctx _]
