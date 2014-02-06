@@ -3,7 +3,7 @@
             [clojure.test :as test]))
 
 (test/deftest empty-is-empty
-  (test/is (subs/empty? (subs/empty))))
+  (test/is (empty? (subs/empty))))
 
 (test/deftest empty-matches-nothing
   (test/is (empty? (subs/matches (subs/empty) []))))
@@ -17,7 +17,7 @@
   (test/is (let [topic ["foo" "bar"]
                  withsub (subs/insert (subs/empty) topic 1)
                  withoutsub (subs/remove withsub topic 1)]
-             (subs/empty? withoutsub))))
+             (empty? withoutsub))))
 
 (test/deftest no-matches-once-removed
   (test/is (empty? (let [topic1 ["foo" "bar"]

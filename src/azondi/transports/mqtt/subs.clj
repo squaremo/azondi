@@ -1,40 +1,18 @@
 ;; Subscription lookup
 
 (ns azondi.transports.mqtt.subs
-  (:refer-clojure :exclude [remove empty]
-                  :rename {empty? null?})
+  (:refer-clojure :exclude [remove empty])
   (:use [clojure.set :only [union]]))
 
-(deftype Node [children anytail empty])
+;; A tree is a nested map with sets at the leaves. To avoid
+;; overwriting leaves when inserting longer topics (e.g., inserting
+;; ["foo" "bar"] after inserting ["foo"]), the end of a topic is
+;; represented by nil.
 
-(def EMPTY (Node. {} #{} #{}))
+(defn empty [] {})
 
-(defn empty [] EMPTY)
-
-(defn empty? [tree] (= tree EMPTY))
-
-
-(defn- make-node [children anytail empty]
-  (if (and (null? children) (null? anytail) (null? empty))
-    EMPTY
-    (Node. children anytail empty)))
-
-(defn- node-without [node prefix]
-  (make-node (dissoc (.children node) prefix)
-             (.anytail node) (.empty node)))
-
-(defn- node-without-empty [node value]
-  (make-node (.children node) (.anytail node)
-             (disj (.empty node) value)))
-
-(defn- node-without-anytail [node value]
-  (make-node (.children node)
-             (disj (.anytail node) value) (.empty node)))
-
-(defn- node-with [node prefix child]
-  (Node. (assoc (.children node) prefix child)
-         (.anytail node) (.empty node)))
-
+(defn insert [tree topic value]
+  (update-in tree (conj topic nil) (fnil conj #{}) value))
 
 (defn matches [tree topic]
   (loop [node tree
@@ -42,98 +20,57 @@
          backtrack '()
          result #{}]
     (cond
+     ;; Dead end. We got here because a key didn't exist (or the whole
+     ;; tree is empty).
      (nil? node)
-     (if (null? backtrack)
+     (if (empty? backtrack)
        result
        (recur (first backtrack) (second backtrack)
               (drop 2 backtrack) result))
-     
-     (null? topic)
-     ;; simple way to backtrack
-     (recur nil [] backtrack (union (.anytail node) (.empty node) result))
-     
+
+     ;; No more things to match. However, there's the empty
+     ;; transition, keyed by nil, and the "all remaining" transition,
+     ;; keyed by "#", to consider.
+     (empty? topic)
+     (recur (node "#") topic backtrack
+            (union result (node nil)))
+
+     ;; Still topic and node to go; can backtrack to a "+" or "#" from
+     ;; here.
      :else
-     (let [children (.children node)
-           anytail  (.anytail node)
-           tail (rest topic)]
-       (recur (children (first topic)) tail
-              (conj backtrack tail (children "+"))
-              (union result anytail))))))
+     (recur (node (first topic)) (rest topic)
+            (conj backtrack
+                  (rest topic) (node "+")
+                  [] (node "#")) result))))
 
-(defn insert [tree topic value]
-
-  (defn zipup [tail path]
-    (loop [node tail
-           path path]
-      (if (null? path)
-        node
-        (let [prefix (first path)
-              parent (second path)]
-          (recur (node-with parent prefix node) (drop 2 path))))))
-
-  (loop [node tree
-         topic topic
-         path '()]
-    (cond
-     ;; if there's no such child
-     (nil? node)
-     (let [revtopic (reverse topic)
-           tail (reduce (fn [node prefix]
-                          (Node. {prefix node} #{} #{}))
-                        (cond
-                         (null? revtopic) (Node. {} #{} #{value})
-                         (= "#" (first revtopic)) (Node. {} #{value} #{})
-                         :else (Node. {(first revtopic)
-                                       (Node. {} #{} #{value})} #{} #{}))
-                        (rest revtopic))]
-       (zipup tail path))
-     
-     (= ["#"] topic)
-     (zipup (Node. (.children node)
-                   (conj (.anytail node) value)
-                   (.empty node)) path)
-     
-     (null? topic)
-     (zipup (Node. (.children node)
-                   (.anytail node)
-                   (conj (.empty node) value)) path)
-     
-     :else
-     (recur ((.children node) (first topic))
-            (rest topic) (conj path node (first topic))))))
-
-
+;; Removal is a bit trickier than insertion.
 (defn remove [tree topic value]
 
-  (defn zipup [child path]
+  (defn- zipup [child path]
     (loop [node child
            path path]
       (cond
-       (null? path)
+       (empty? path)
        node
-       
-       (= EMPTY node)
-       (recur (node-without (second path) (first path)) (drop 2 path))
-
+       (empty? node)
+       (recur (dissoc (first path) (second path)) (drop 2 path))
        :else
-       (let [prefix    (first path)
-             parent    (second path)
-             newparent (node-with parent prefix node)]
-         (recur newparent (drop 2 path))))))
+       (recur (assoc (first path) (second path) node) (drop 2 path)))))
 
   (loop [node tree
          topic topic
          path '()]
     (cond
+     ;; Topic not found, we can leave (ha) the tree alone.
      (nil? node)
      tree
-
-     (null? topic)
-     (zipup (node-without-empty node value) path)
-
-     (= ["#"] topic)
-     (zipup (node-without-anytail node value) path)
-
+     
+     (empty? topic)
+     (if-let [leaf (node nil)]
+       (let [newleaf (disj leaf value)
+             without (if (empty? newleaf) (dissoc node nil) node)]
+         (zipup without path)))
+     
      :else
-     (recur ((.children node) (first topic))
-            (rest topic) (conj path node (first topic))))))
+     (recur (node (first topic)) (rest topic)
+            (conj path (first topic) node)))))
