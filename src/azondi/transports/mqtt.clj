@@ -124,17 +124,22 @@
       (reject-connection ctx :unacceptable-protocol-version))))
 
 (defn handle-subscribe
-  [^ChannelHandlerContext ctx msg subscriptions]
-  (.writeAndFlush ctx {:type :suback})
+  [^ChannelHandlerContext ctx {:keys [message-id
+                                      topics] :as msg}
+   {:keys [subscriptions] :as handler-state}]
   (dosync
    (alter subscriptions (fn [subs]
                           (reduce #(update-in %1 [%2] conj ctx)
-                                  subs (map first (:topics msg)))))))
+                                  subs (map first (:topics msg))))))
+  (.writeAndFlush ctx {:type :suback
+                       :message-id message-id
+                       :granted-qos (map (fn [[_ _]] 0) topics)}))
 
 (defn handle-publish
-  [^ChannelHandlerContext ctx msg {:keys [connections-by-ctx
-                                          subscriptions
-                                          channel] :as handler-state}]
+  [^ChannelHandlerContext ctx
+   {:keys [connections-by-ctx
+           subscriptions
+           channel] :as handler-state}]
   ;; example message:
   ;; {:payload #<byte[] [B@1503e6b>,
   ;;  :message-id 1,
